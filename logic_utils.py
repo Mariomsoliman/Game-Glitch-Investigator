@@ -51,5 +51,29 @@ def check_guess(guess, secret):
 
 
 def update_score(current_score: int, outcome: str, attempt_number: int):
-    """Update score based on outcome and attempt number."""
-    raise NotImplementedError("Refactor this function from app.py into logic_utils.py")
+    """
+    Update score based on outcome and attempt number.
+
+    attempt_number is the count of accepted guesses including this one
+    (1 for the first guess). Current rules, kept as-is because the assignment
+    never specified scoring:
+    - "Win": add 100 - 10 * (attempt_number + 1), but never less than 10.
+    - "Too High": add 5 on even attempt numbers, subtract 5 on odd ones.
+    - "Too Low": subtract 5.
+    - Anything else: score unchanged.
+    """
+    if outcome == "Win":
+        points = 100 - 10 * (attempt_number + 1)
+        if points < 10:
+            points = 10
+        return current_score + points
+
+    if outcome == "Too High":
+        if attempt_number % 2 == 0:
+            return current_score + 5
+        return current_score - 5
+
+    if outcome == "Too Low":
+        return current_score - 5
+
+    return current_score

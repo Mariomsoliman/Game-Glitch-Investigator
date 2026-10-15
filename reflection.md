@@ -35,6 +35,12 @@ Document at least 3 bugs you found. Add rows as needed.
 - Give one example of an AI suggestion that was correct (including what the AI suggested and how you verified the result).
 - Give one example of an AI suggestion you did not accept as written (including what the AI suggested, why you rejected or changed it, and how you verified your version). It does not have to be a suggestion that was wrong: over-engineered, out of scope, harder to read, or a poor fit for this codebase all count.
 
+**AI tools.** I used two AI tools: Claude, through Claude Code in VS Code, and ChatGPT. Claude edited files and ran automated investigations, such as Streamlit AppTest reproductions and test runs. ChatGPT helped me understand concepts, review Claude's plans and diffs, question the score-drop inference, and follow the Git and testing workflow. I made the decisions about scope, and I did the browser checks and my local test runs myself.
+
+**A suggestion I accepted.** The starter tests compared `check_guess` to a plain string like `"Win"`, but the function returns an `(outcome, message)` pair. Claude suggested keeping the pair and updating the tests to check both the outcome and the hint direction. It pointed out that the outcome labels were already correct, so the starter tests could never have caught the reversed hints. I verified this by seeing the new tests fail on the old code (a Claude-run `pytest` showed 10 failed, 3 passed), all for the expected reasons. After the fix, my own local run passed all 13 tests.
+
+**A suggestion I changed.** In a draft of my bug log, Claude wrote that a guess of `100` was scored as "Too Low" because the score went down by 5. With ChatGPT's help, I questioned that, because a score drop can't prove the outcome: both "Too Low" and "Too High" (on odd attempts) subtract 5. Instead, we called `check_guess` directly with the same arguments the game would pass. `check_guess(100, "9")` returned `"Too Low"`, so the claim stayed, but now it rests on direct evidence and is labeled that way in Section 1.
+
 ---
 
 ## 3. Debugging and testing your fixes
@@ -44,31 +50,32 @@ Document at least 3 bugs you found. Add rows as needed.
   and what it showed you about your code.
 - Did AI help you design or understand any tests? How?
 
-**Deciding whether a bug was fixed.** I only counted a bug as fixed if a test failed before the fix and passed after it, without changing the test's assertions. Before the fixes, a Claude-run `pytest` against the moved but still-buggy `check_guess` reported 10 failed and 3 passed. Every failure was either a hint pointing the wrong way or the string-comparison fallback not raising `TypeError`. After the fixes, my own local run of `python -m pytest -v` passed all 13 tests in 0.97 seconds. I then played one game in the browser as a final check.
+**Deciding whether a bug was fixed.** I only counted a bug as fixed if a test failed on the old code and passed after the fix, without loosening the test. For each repair, Claude ran the new tests against the unfixed code first. The results were 10 failed for the hint and comparison fix, 20 failed for input validation, and 17 failed for the round lifecycle, each for the expected reason. After each fix, the full suite passed, and I ran it locally myself (13 tests in 0.97 seconds, then 50, then 68 in 2.94 seconds). For behavior that tests can't fully show, I also checked the game in my browser.
 
-**Tests I ran and what they showed.**
-- *Unit tests (`tests/test_game_logic.py`):* these check both the outcome and the hint direction for higher, lower, and equal guesses. They also cover guesses one away from the secret, cases where number order and alphabetical order disagree (`10` vs `9`, `100` vs `9`, `9` vs `10`), and a `str` secret, which must now raise `TypeError`. The original starter tests only checked the outcome label, which was already correct, so they could not have caught the reversed hints.
-- *AppTest (`tests/test_app_flow.py`, Claude-assisted):* these submit the same guess four times in a row, so both even and odd attempt counts are covered, and check winning on either parity. Before the fix, both repeated-guess tests failed on submission 2 (attempts=3) because the hint flipped. I have not manually verified repeated directional hints in the browser; that evidence comes from AppTest only.
-- *Browser (manual):* the secret was 78, and submitting `78` displayed "Correct!" and "You won! The secret was 78. Final score: 30." This confirms winning works after the refactor. On its own it does not prove the comparison fix, because wins already worked before the fix (the two AppTest win tests passed both before and after). The debug panel still showed the pre-submission values Attempts 4, Score -10, and history `[55, "abc ", 9]`, so the display-lag bug remains, and invalid text is still recorded in history.
+**A test I ran and what it showed.** One useful Claude-assisted AppTest submits the same guess four times in a row, so it covers both even and odd attempt counts. Before the fix, it failed on the second submission because the hint flipped, which proved the comparison bug depended on the attempt count. The first submission passed by coincidence, because the two bugs cancelled each other out, so a single manual guess could easily have fooled me. In the browser, I confirmed three things after the round-lifecycle repair: New Game resets after a win, Easy shows the correct range and attempt limit, and toggling Show hint keeps the round. I have not manually checked repeated directional hints in the browser; that evidence comes from AppTest only.
 
-**How AI helped with tests.** Claude proposed the regression tests. It suggested checking the hint direction and not just the outcome label, using values where alphabetical and numeric order disagree, and using AppTest for the submit handler, which unit tests on `check_guess` cannot reach. Claude also ran the suite before the fixes and showed which tests failed and why. I ran the final suite locally myself.
+**How AI helped with tests.** Claude proposed most of the regression tests and explained why each one was needed. For example, it suggested checking the hint direction and not just the outcome label, and using values where alphabetical and numeric order disagree. It also suggested AppTest for the submit handler, which unit tests can't reach, and a fake `random.randint` so secret-range bugs show up on the first try instead of by luck. I decided which behaviors were in scope, and I ran the final suites locally.
 
-**Repaired vs. remaining**
+**Repair status** *(commit references show where each repair was committed)*
 
 | Bug (see Section 1) | Status | Evidence |
 |---------------------|--------|----------|
-| Reversed high/low hint messages | Repaired | Unit tests failed before the fix and pass after; my local run passed 13/13 |
-| Secret converted to `str` on even attempts, plus the string-comparison fallback | Repaired | AppTest repeated-guess tests failed before the fix and pass after; `test_type_mismatch_fails_loudly` passes |
-| "Attempts left" and debug panel drawn before the submit handler (display lag) | Remaining | My browser game (secret 78) still showed pre-submission debug values |
-| Invalid input recorded in history and counted as an attempt; no range check | Remaining | My browser game history contained `"abc "`; Section 1 table |
-| Attempt counter starts at 1 | Remaining | Section 1 table (Claude-assisted AppTest) |
-| New Game does not reset status, score, or history | Remaining | Section 1 table (Claude-assisted AppTest) |
+| Reversed high/low hint messages | Repaired (`d027945`) | Unit tests failed before the fix and pass after; my local run passed 13/13 |
+| Secret converted to `str` on even attempts, plus the string-comparison fallback | Repaired (`d027945`) | Claude-assisted AppTest repeated-guess tests failed before and pass after; `test_type_mismatch_fails_loudly` passes |
+| Invalid input counted as an attempt and recorded in history; decimals truncated; no range check | Repaired (`ceca5b0`) | Claude-run tests: 20 failed before, 50 passed after; my local run passed all 50 |
+| Attempt counter starts at 1 | Repaired (`c280bf8`) | Claude-assisted AppTest: limit tests failed before, pass after; my browser check: Easy shows the correct range and attempt limit |
+| "Attempts left" and debug panel drawn before the guess is processed (display lag) | Repaired (`c280bf8`) | Claude-assisted AppTest: display test failed before, passes after. Not separately checked in my browser |
+| New Game does not reset status, score, or history | Repaired (`c280bf8`) | Claude-assisted AppTest: reset tests failed before, pass after; my browser check: New Game resets after a win |
+| New Game and difficulty switch drew the secret from the wrong range or kept the old one (found during investigation) | Repaired (`c280bf8`) | Claude-assisted AppTest with a controlled `random.randint` |
+| Scoring oddities (for example, +5 for a "Too High" guess on even attempts) | Not changed | Scoring rules were never specified; current behavior is documented in `update_score` and `tests/test_update_score.py` |
 
 ---
 
 ## 4. What did you learn about Streamlit and state?
 
 - How would you explain Streamlit "reruns" and session state to a friend who has never used Streamlit?
+
+When a widget interaction is submitted, such as clicking a button, toggling a checkbox, or applying a text-input change, Streamlit runs your whole script again from top to bottom. That's a "rerun". Normal variables are rebuilt from scratch on each rerun, so anything the game needs to remember, like the secret, attempts, and score, has to live in `st.session_state`, which survives between reruns. Order matters too: in this game, the attempts and debug panel were drawn before the guess was processed, so they always showed the previous values. I also learned that a widget's stored value can't be changed after the widget is drawn in the same run, so resetting the guess box has to happen in a button callback, which runs before the page is drawn.
 
 ---
 
@@ -78,3 +85,9 @@ Document at least 3 bugs you found. Add rows as needed.
   - This could be a testing habit, a prompting strategy, or a way you used Git.
 - What is one thing you would do differently next time you work with AI on a coding task?
 - In one or two sentences, describe how this project changed the way you think about AI generated code.
+
+**A habit I want to keep.** I want to keep writing a regression test, watching it fail on the broken code, and only then fixing the bug. Seeing the test fail for the right reason showed me that the test actually catches the bug, and seeing it pass afterwards gave me real evidence that the fix worked. I also want to keep labeling where each piece of evidence came from: my browser, my local test run, or an AI-assisted run.
+
+**Something I'd do differently.** Next time I'll write down exact steps while testing in the browser. My first game's notes didn't record my final guess or whether I had clicked New Game, so we could only guess at part of what happened. I'd also ask the AI to separate what it has verified from what it is inferring before I accept a conclusion, since the score-drop claim looked convincing until we checked it directly.
+
+**How this changed my view of AI-generated code.** AI-generated code can look finished and still hide several bugs that cover for each other. Now I treat AI output, including my AI teammate's suggestions, as a hypothesis to test, not as an answer.
