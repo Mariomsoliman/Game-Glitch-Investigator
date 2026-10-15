@@ -3,13 +3,27 @@ def get_range_for_difficulty(difficulty: str):
     raise NotImplementedError("Refactor this function from app.py into logic_utils.py")
 
 
-def parse_guess(raw: str):
+def parse_guess(raw: str, low: int, high: int):
     """
-    Parse user input into an int guess.
+    Parse user input into a whole-number guess within [low, high] (inclusive).
 
     Returns: (ok: bool, guess_int: int | None, error_message: str | None)
     """
-    raise NotImplementedError("Refactor this function from app.py into logic_utils.py")
+    # FIX: Decimals were silently truncated ("9.7" -> 9) and out-of-range
+    # values were accepted. Found in a Claude-assisted review; whole numbers
+    # in the difficulty's range are now the only valid guesses.
+    if raw is None or raw.strip() == "":
+        return False, None, "Enter a guess."
+
+    try:
+        value = int(raw.strip())
+    except ValueError:
+        return False, None, "Enter a whole number, like 42."
+
+    if not low <= value <= high:
+        return False, None, f"Enter a number from {low} to {high}."
+
+    return True, value, None
 
 
 def check_guess(guess, secret):
