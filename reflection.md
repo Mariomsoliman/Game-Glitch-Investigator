@@ -25,6 +25,8 @@ Document at least 3 bugs you found. Add rows as needed.
 
 *Note on evidence: AppTest runs used Streamlit's `streamlit.testing.v1.AppTest` to simulate clicks headlessly; the secret was set directly in `st.session_state` to make results repeatable. I have not yet manually repeated those exact steps in the browser.*
 
+*Note on code references: the file names and line numbers in this table refer to the original code at commit `481fa66`. This log is kept as a historical record; later changes moved `check_guess` into `logic_utils.py`, so current line numbers differ.*
+
 ---
 
 ## 2. How did you use AI as a teammate?
@@ -41,6 +43,26 @@ Document at least 3 bugs you found. Add rows as needed.
 - Describe at least one test you ran (manual or using pytest)  
   and what it showed you about your code.
 - Did AI help you design or understand any tests? How?
+
+**Deciding whether a bug was fixed.** I only counted a bug as fixed if a test failed before the fix and passed after it, without changing the test's assertions. Before the fixes, a Claude-run `pytest` against the moved but still-buggy `check_guess` reported 10 failed and 3 passed. Every failure was either a hint pointing the wrong way or the string-comparison fallback not raising `TypeError`. After the fixes, my own local run of `python -m pytest -v` passed all 13 tests in 0.97 seconds. I then played one game in the browser as a final check.
+
+**Tests I ran and what they showed.**
+- *Unit tests (`tests/test_game_logic.py`):* these check both the outcome and the hint direction for higher, lower, and equal guesses. They also cover guesses one away from the secret, cases where number order and alphabetical order disagree (`10` vs `9`, `100` vs `9`, `9` vs `10`), and a `str` secret, which must now raise `TypeError`. The original starter tests only checked the outcome label, which was already correct, so they could not have caught the reversed hints.
+- *AppTest (`tests/test_app_flow.py`, Claude-assisted):* these submit the same guess four times in a row, so both even and odd attempt counts are covered, and check winning on either parity. Before the fix, both repeated-guess tests failed on submission 2 (attempts=3) because the hint flipped. I have not manually verified repeated directional hints in the browser; that evidence comes from AppTest only.
+- *Browser (manual):* the secret was 78, and submitting `78` displayed "Correct!" and "You won! The secret was 78. Final score: 30." This confirms winning works after the refactor. On its own it does not prove the comparison fix, because wins already worked before the fix (the two AppTest win tests passed both before and after). The debug panel still showed the pre-submission values Attempts 4, Score -10, and history `[55, "abc ", 9]`, so the display-lag bug remains, and invalid text is still recorded in history.
+
+**How AI helped with tests.** Claude proposed the regression tests. It suggested checking the hint direction and not just the outcome label, using values where alphabetical and numeric order disagree, and using AppTest for the submit handler, which unit tests on `check_guess` cannot reach. Claude also ran the suite before the fixes and showed which tests failed and why. I ran the final suite locally myself.
+
+**Repaired vs. remaining**
+
+| Bug (see Section 1) | Status | Evidence |
+|---------------------|--------|----------|
+| Reversed high/low hint messages | Repaired | Unit tests failed before the fix and pass after; my local run passed 13/13 |
+| Secret converted to `str` on even attempts, plus the string-comparison fallback | Repaired | AppTest repeated-guess tests failed before the fix and pass after; `test_type_mismatch_fails_loudly` passes |
+| "Attempts left" and debug panel drawn before the submit handler (display lag) | Remaining | My browser game (secret 78) still showed pre-submission debug values |
+| Invalid input recorded in history and counted as an attempt; no range check | Remaining | My browser game history contained `"abc "`; Section 1 table |
+| Attempt counter starts at 1 | Remaining | Section 1 table (Claude-assisted AppTest) |
+| New Game does not reset status, score, or history | Remaining | Section 1 table (Claude-assisted AppTest) |
 
 ---
 
